@@ -1,0 +1,176 @@
+#include <bits/stdc++.h>
+using namespace std;
+
+const int MAXLEN = 100005;
+
+// Suffix Automaton para buscar subcadenas de TDP en JCN
+struct SuffixAutomaton {
+    struct State {
+        int len, link;
+        int next[256];
+        State() : len(0), link(-1) {
+            memset(next, -1, sizeof(next));
+        }
+    };
+    vector<State> st;
+    int last;
+
+    SuffixAutomaton() {
+        st.clear();
+        st.emplace_back();
+        last = 0;
+    }
+
+    // Agrega un caracter al autómata
+    void extend(char c) {
+        int p = last;
+        int cur = st.size();
+        st.emplace_back();
+        st[cur].len = st[p].len + 1;
+        while (p != -1 && st[p].next[(int)c] == -1) {
+            st[p].next[(int)c] = cur;
+            p = st[p].link;
+        }
+        if (p == -1) {
+            st[cur].link = 0;
+        } else {
+            int q = st[p].next[(int)c];
+            if (st[p].len + 1 == st[q].len) {
+                st[cur].link = q;
+            } else {
+                int clone = st.size();
+                st.push_back(st[q]);
+                st[clone].len = st[p].len + 1;
+                while (p != -1 && st[p].next[(int)c] == q) {
+                    st[p].next[(int)c] = clone;
+                    p = st[p].link;
+                }
+                st[q].link = st[cur].link = clone;
+            }
+        }
+        last = cur;
+    }
+};
+
+// Representa una coincidencia encontrada
+struct Match {
+    int start, len;
+    bool operator<(const Match& other) const {
+        if (len != other.len) return len > other.len;
+        return start < other.start;
+    }
+};
+
+int main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int tcase = 1;
+    int k;
+    bool firstCase = true;
+
+    while (cin >> k && k != 0) {
+        if (!firstCase) cout << "\n";
+        firstCase = false;
+
+        cin.ignore();
+
+        string tdp_code, jcn_code;
+        string line;
+
+        // Leer TDP
+        getline(cin, line);
+        while (getline(cin, line)) {
+            if (line == "END TDP CODEBASE") break;
+            tdp_code += line + "\n";
+        }
+
+        // Leer JCN
+        getline(cin, line);
+        while (getline(cin, line)) {
+            if (line == "END JCN CODEBASE") break;
+            jcn_code += line + "\n";
+        }
+
+        // Construir autómata con TDP
+        SuffixAutomaton sam;
+        for (size_t i = 0; i < tdp_code.size(); i++) {
+            sam.extend(tdp_code[i]);
+        }
+
+        // Encontrar coincidencias más largas para cada posición de JCN
+        int n = jcn_code.size();
+        vector<int> lenB(n, 0);
+        int v = 0, l = 0;
+        for (int i = 0; i < n; i++) {
+            char c = jcn_code[i];
+            while (v != -1 && sam.st[v].next[(int)c] == -1) {
+                v = sam.st[v].link;
+                if (v != -1) l = sam.st[v].len;
+            }
+            if (v == -1) {
+                v = 0;
+                l = 0;
+            } else {
+                v = sam.st[v].next[(int)c];
+                l++;
+            }
+            lenB[i] = l;
+        }
+
+        // Generar todas las coincidencias
+        vector<Match> matches;
+        for (int i = 0; i < n; i++) {
+            if (lenB[i] > 0) {
+                int start = i - lenB[i] + 1;
+                matches.push_back({start, lenB[i]});
+            }
+        }
+
+        // Eliminar duplicados
+        sort(matches.begin(), matches.end(), [](const Match& a, const Match& b) {
+            if (a.start != b.start) return a.start < b.start;
+            return a.len < b.len;
+        });
+        matches.erase(unique(matches.begin(), matches.end(),
+            [](const Match& a, const Match& b) {
+                return a.start == b.start && a.len == b.len;
+            }), matches.end());
+
+        // Ordenar por longitud descendente y posición ascendente
+        sort(matches.begin(), matches.end());
+
+        // Filtrar solo coincidencias maximales (no contenidas en otras)
+        vector<Match> filtered;
+        for (size_t i = 0; i < matches.size(); i++) {
+            int s = matches[i].start;
+            int len = matches[i].len;
+            int e = s + len - 1;
+            bool contained = false;
+            for (size_t j = 0; j < filtered.size(); j++) {
+                int s2 = filtered[j].start;
+                int len2 = filtered[j].len;
+                int e2 = s2 + len2 - 1;
+                if (s2 <= s && e2 >= e && (s2 < s || e2 > e)) {
+                    contained = true;
+                    break;
+                }
+            }
+            if (!contained) {
+                filtered.push_back(matches[i]);
+            }
+        }
+
+        // Mostrar resultados
+        cout << "CASE " << tcase++ << "\n";
+        int cnt = 0;
+        for (size_t i = 0; i < filtered.size() && cnt < k; i++) {
+            cout << "INFRINGING SEGMENT " << ++cnt
+                 << " LENGTH " << filtered[i].len
+                 << " POSITION " << filtered[i].start << "\n";
+            cout << jcn_code.substr(filtered[i].start, filtered[i].len) << "\n";
+        }
+    }
+
+    return 0;
+}

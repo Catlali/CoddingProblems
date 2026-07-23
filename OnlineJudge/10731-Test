@@ -1,0 +1,137 @@
+#include <bits/stdc++.h>
+using namespace std;
+
+#define MAX_NODES 26  
+vector<int> adj[MAX_NODES];
+vector<int> adj_rev[MAX_NODES];
+bool visited[MAX_NODES];
+vector<int> order;
+int comp_id[MAX_NODES];
+vector<vector<int>> components;
+
+void dfs1(int u) {
+    visited[u] = true;
+    for (int v : adj[u]) {
+        if (!visited[v]) {
+            dfs1(v);
+        }
+    }
+    order.push_back(u);
+}
+
+void dfs2(int u, int comp) {
+    visited[u] = true;
+    comp_id[u] = comp;
+    components[comp].push_back(u);
+    for (int v : adj_rev[u]) {
+        if (!visited[v]) {
+            dfs2(v, comp);
+        }
+    }
+}
+
+void build_graph(int n) {
+    // Limpiar grafos
+    for (int i = 0; i < MAX_NODES; i++) {
+        adj[i].clear();
+        adj_rev[i].clear();
+    }
+    
+    for (int q = 0; q < n; q++) {
+        char activities[5];
+        char chosen;
+        
+        // Leer 5 actividades
+        for (int i = 0; i < 5; i++) {
+            cin >> activities[i];
+        }
+        cin >> chosen;
+        
+        // Agregar aristas: chosen prefiere sobre las otras 4
+        for (int i = 0; i < 5; i++) {
+            if (activities[i] != chosen) {
+                int u = chosen - 'A';
+                int v = activities[i] - 'A';
+                adj[u].push_back(v);
+                adj_rev[v].push_back(u);
+            }
+        }
+    }
+}
+
+void kosaraju() {
+    // Primer paso: DFS para orden de cierre
+    memset(visited, false, sizeof(visited));
+    order.clear();
+    
+    // Solo procesar nodos que aparecen en el grafo
+    bool nodes_present[MAX_NODES] = {false};
+    for (int u = 0; u < MAX_NODES; u++) {
+        if (!adj[u].empty()) {
+            nodes_present[u] = true;
+            for (int v : adj[u]) {
+                nodes_present[v] = true;
+            }
+        }
+    }
+    
+    for (int u = 0; u < MAX_NODES; u++) {
+        if (nodes_present[u] && !visited[u]) {
+            dfs1(u);
+        }
+    }
+    
+    // Segundo paso: DFS en grafo transpuesto en orden inverso
+    memset(visited, false, sizeof(visited));
+    components.clear();
+    memset(comp_id, -1, sizeof(comp_id));
+    
+    for (int i = order.size() - 1; i >= 0; i--) {
+        int u = order[i];
+        if (!visited[u]) {
+            components.push_back(vector<int>());
+            dfs2(u, components.size() - 1);
+        }
+    }
+}
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(NULL);
+    
+    int n;
+    int case_num = 0;
+    
+    while (cin >> n && n != 0) {
+        case_num++;
+        
+        build_graph(n);
+        kosaraju();
+        
+        // Ordenar cada componente alfabéticamente
+        for (auto& comp : components) {
+            sort(comp.begin(), comp.end());
+        }
+        
+        // Ordenar componentes por su primer elemento
+        sort(components.begin(), components.end(),
+            [](const vector<int>& a, const vector<int>& b) {
+                return a[0] < b[0];
+            });
+        
+        // Imprimir resultado
+        if (case_num > 1) {
+            cout << "\n";
+        }
+        
+        for (const auto& comp : components) {
+            for (size_t i = 0; i < comp.size(); i++) {
+                if (i > 0) cout << " ";
+                cout << char(comp[i] + 'A');
+            }
+            cout << "\n";
+        }
+    }
+    
+    return 0;
+}

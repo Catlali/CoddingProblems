@@ -1,0 +1,188 @@
+#include <bits/stdc++.h>
+using namespace std;
+
+const int INF = 1e9; 
+
+// Estructura para manejar el flujo máximo 
+struct MaxFlow {
+    struct Edge {
+        int to, cap, rev;  // nodo destino, capacidad restante, índice de la arista inversa
+    };
+    vector<vector<Edge>> g;  // grafo de adyacencia
+    vector<int> level, iter; // level: niveles BFS, iter: aristas a explorar en DFS
+    int n;  // número de nodos
+
+    MaxFlow(int n) : n(n), g(n), level(n), iter(n) {}
+
+    // Agrega una arista dirigida 
+    void add_edge(int from, int to, int cap) {
+        g[from].push_back({to, cap, (int)g[to].size()});
+        g[to].push_back({from, 0, (int)g[from].size() - 1});  
+    }
+
+    // BFS para construir el grafo de niveles
+    void bfs(int s) {
+        fill(level.begin(), level.end(), -1);
+        queue<int> q;
+        level[s] = 0;
+        q.push(s);
+        while (!q.empty()) {
+            int v = q.front(); q.pop();
+            for (auto& e : g[v]) {
+                if (e.cap > 0 && level[e.to] < 0) {
+                    level[e.to] = level[v] + 1;
+                    q.push(e.to);
+                }
+            }
+        }
+    }
+
+    // DFS para encontrar bloques de flujo aumentante
+    int dfs(int v, int t, int f) {
+        if (v == t) return f;
+        for (int& i = iter[v]; i < (int)g[v].size(); i++) {
+            Edge& e = g[v][i];
+            if (e.cap > 0 && level[v] < level[e.to]) {
+                int d = dfs(e.to, t, min(f, e.cap));
+                if (d > 0) {
+                    e.cap -= d;
+                    g[e.to][e.rev].cap += d;
+                    return d;
+                }
+            }
+        }
+        return 0;
+    }
+
+    // Calcula el flujo máximo desde s hasta t
+    int max_flow(int s, int t) {
+        int flow = 0;
+        while (true) {
+            bfs(s);
+            if (level[t] < 0) return flow;  
+            fill(iter.begin(), iter.end(), 0);
+            int f;
+            while ((f = dfs(s, t, INF)) > 0) {
+                flow += f;
+            }
+        }
+    }
+};
+
+int main() {
+    ios_base::sync_with_stdio(false); 
+    cin.tie(NULL);
+
+    int T;
+    string line;
+    cin >> T;
+    getline(cin, line);  // consumir el salto de línea después de T
+    getline(cin, line);  // consumir línea en blanco
+
+    bool first_case = true;  // control de formato de salida
+
+    while (T--) {
+        if (!first_case) cout << "\n";  // separa casos con línea en blanco
+        first_case = false;
+
+        // Mapeos para asignar IDs únicos a cada entidad
+        map<string, int> club_id, person_id, party_id;
+        vector<string> club_list, person_list, party_list;
+        vector<vector<string>> person_clubs; 
+        vector<string> person_party;          
+
+        // Lectura del caso de prueba
+        string s;
+        while (getline(cin, s) && !s.empty()) {
+            istringstream iss(s);
+            string person, party;
+            iss >> person >> party;
+
+            // Registrar persona si es nueva
+            if (person_id.count(person) == 0) {
+                person_id[person] = person_list.size();
+                person_list.push_back(person);
+                person_clubs.emplace_back();
+                person_party.push_back(party);
+            }
+
+            // Registrar partido si es nuevo
+            if (party_id.count(party) == 0) {
+                party_id[party] = party_list.size();
+                party_list.push_back(party);
+            }
+
+            // Registrar todos los clubes de esta persona
+            string club;
+            while (iss >> club) {
+                if (club_id.count(club) == 0) {
+                    club_id[club] = club_list.size();
+                    club_list.push_back(club);
+                }
+                person_clubs[person_id[person]].push_back(club);
+            }
+        }
+
+        int K = club_list.size();   
+        int P = party_list.size();  
+        int N = person_list.size(); 
+        int limit = (K - 1) / 2;    
+        // Definición de índices para la red de flujo
+        int source = 0;
+        int club_start = 1;
+        int person_start = club_start + K;
+        int party_start = person_start + N;
+        int sink = party_start + P;
+
+        MaxFlow mf(sink + 1);  
+
+        // Arista: fuente -> club 
+        for (int i = 0; i < K; i++) {
+            mf.add_edge(source, club_start + i, 1);
+        }
+
+        // Arista: persona -> partido 
+        for (int i = 0; i < N; i++) {
+            string party = person_party[i];
+            int pid = party_id[party];
+            mf.add_edge(person_start + i, party_start + pid, 1);
+        }
+
+        // Arista: partido -> sumidero 
+        for (int i = 0; i < P; i++) {
+            mf.add_edge(party_start + i, sink, limit);
+        }
+
+        // Arista: club -> persona 
+        for (int i = 0; i < N; i++) {
+            for (string& club : person_clubs[i]) {
+                int cid = club_id[club];
+                mf.add_edge(club_start + cid, person_start + i, 1);
+            }
+        }
+
+        int flow = mf.max_flow(source, sink);  
+        if (flow != K) {
+            cout << "Impossible.\n";
+        } else {
+            // Reconstruir la asignación club -> persona
+            vector<int> club_rep(K, -1);
+            for (int i = 0; i < K; i++) {
+                for (auto& e : mf.g[club_start + i]) {
+                    // Buscar arista con capacidad 0 que va a una persona (flujo utilizado)
+                    if (e.to >= person_start && e.to < person_start + N && e.cap == 0) {
+                        int person = e.to - person_start;
+                        club_rep[i] = person;
+                        break;
+                    }
+                }
+            }
+
+            // Imprimir resultados
+            for (int i = 0; i < K; i++) {
+                cout << person_list[club_rep[i]] << " " << club_list[i] << "\n";
+            }
+        }
+    }
+    return 0;
+}
